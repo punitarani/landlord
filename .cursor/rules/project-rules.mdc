@@ -1,0 +1,16 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Project Rules
+
+- This is a Next.JS + App Router Project written in TypeScript using Bun as the package manager.
+- Use tailwindcss and shadcn components as much as possible (@/components/ui)
+
+## Instruction Rules
+
+1. Explore the codebase and understand the files you need and the task that needs to be accomplished.
+2. Analyze, Brainstorm, and Outline your plan and next steps.
+3. Write the code incrementally following your plan and document each step and summarize changes at the end.
