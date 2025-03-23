@@ -1,82 +1,7 @@
 "use client";
 
+import type { MapKit as MapKitMapType } from "@/types/mapkit";
 import { useCallback, useEffect, useRef } from "react";
-
-// Define minimal MapKit types
-declare global {
-  interface Window {
-    mapkit: {
-      init: (options: {
-        authorizationCallback: (done: (token: string) => void) => void;
-        language?: string;
-      }) => void;
-      Map: new (element: HTMLElement, options?: MapKitOptions) => MapKitMap;
-      Coordinate: new (latitude: number, longitude: number) => MapKitCoordinate;
-      CoordinateRegion: new (
-        center: MapKitCoordinate,
-        span: MapKitCoordinateSpan,
-      ) => MapKitCoordinateRegion;
-      CoordinateSpan: new (
-        latitudeDelta: number,
-        longitudeDelta: number,
-      ) => MapKitCoordinateSpan;
-      Padding: new (
-        top: number,
-        right: number,
-        bottom: number,
-        left: number,
-      ) => MapKitPadding;
-      FeatureVisibility: {
-        hidden: string;
-        visible: string;
-        adaptive: string;
-      };
-    };
-  }
-
-  interface MapKitOptions {
-    showsZoomControl?: string;
-    showsCompass?: string;
-    showsMapTypeControl?: string;
-    showsScale?: string;
-    isZoomEnabled?: boolean;
-    isRotationEnabled?: boolean;
-    mapType?: string;
-    padding?: MapKitPadding;
-  }
-
-  interface MapKitPadding {
-    top: number;
-    right: number;
-    bottom: number;
-    left: number;
-  }
-
-  interface MapKitMap {
-    setCenterAnimated: (center: MapKitCoordinate) => void;
-    setRegionAnimated: (region: MapKitCoordinateRegion) => void;
-    showsZoomControl: string;
-    showsCompass: string;
-    showsMapTypeControl: string;
-    colorScheme: string;
-    padding: MapKitPadding;
-  }
-
-  interface MapKitCoordinate {
-    latitude: number;
-    longitude: number;
-  }
-
-  interface MapKitCoordinateSpan {
-    latitudeDelta: number;
-    longitudeDelta: number;
-  }
-
-  interface MapKitCoordinateRegion {
-    center: MapKitCoordinate;
-    span: MapKitCoordinateSpan;
-  }
-}
 
 type MapKitProps = {
   token: string;
@@ -93,6 +18,7 @@ type MapKitProps = {
     bottom?: number;
     left?: number;
   };
+  onMapInitialized?: (map: MapKitMapType) => void;
 };
 
 export function MapKit({
@@ -105,10 +31,12 @@ export function MapKit({
   darkMode = true,
   fullscreen = false,
   padding = { top: 0, right: 0, bottom: 0, left: 0 },
+  onMapInitialized,
 }: MapKitProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInitialized = useRef(false);
   const scriptLoaded = useRef(false);
+  const mapInstance = useRef<MapKitMapType | null>(null);
 
   // Create the initializeMap function with useCallback
   const initializeMap = useCallback(() => {
@@ -117,20 +45,20 @@ export function MapKit({
 
     try {
       window.mapkit.init({
-        authorizationCallback: (done) => done(token),
+        authorizationCallback: (done: (token: string) => void) => done(token),
         language: "en",
       });
 
       // Configure map options with proper enums
-      const featureVisibility = showControls
-        ? window.mapkit.FeatureVisibility.visible
-        : window.mapkit.FeatureVisibility.hidden;
-
-      const mapOptions: MapKitOptions = {
-        showsZoomControl: featureVisibility,
-        showsCompass: featureVisibility,
-        showsMapTypeControl: featureVisibility,
-        showsScale: featureVisibility,
+      const mapOptions = {
+        showsZoomControl: showControls,
+        showsCompass: showControls
+          ? window.mapkit.FeatureVisibility.Visible
+          : window.mapkit.FeatureVisibility.Hidden,
+        showsMapTypeControl: showControls,
+        showsScale: showControls
+          ? window.mapkit.FeatureVisibility.Visible
+          : window.mapkit.FeatureVisibility.Hidden,
         isZoomEnabled: true,
         isRotationEnabled: true,
         mapType: "standard",
@@ -138,9 +66,12 @@ export function MapKit({
 
       // Create map
       const map = new window.mapkit.Map(mapRef.current, mapOptions);
+      mapInstance.current = map;
 
       // Set color scheme based on darkMode prop
-      map.colorScheme = darkMode ? "dark" : "light";
+      (map as MapKitMapType & { colorScheme: string }).colorScheme = darkMode
+        ? "dark"
+        : "light";
 
       // Set map position and zoom level
       const center = new window.mapkit.Coordinate(latitude, longitude);
@@ -157,12 +88,27 @@ export function MapKit({
         );
       }
 
+      // Set the region - this is important for the Search API to work correctly
       map.setRegionAnimated(region);
       mapInitialized.current = true;
+
+      // Call onMapInitialized callback if provided
+      if (onMapInitialized && mapInstance.current) {
+        onMapInitialized(mapInstance.current);
+      }
     } catch (error) {
       console.error("Error initializing MapKit:", error);
     }
-  }, [token, latitude, longitude, zoom, showControls, darkMode, padding]);
+  }, [
+    token,
+    latitude,
+    longitude,
+    zoom,
+    showControls,
+    darkMode,
+    padding,
+    onMapInitialized,
+  ]);
 
   // Load the MapKit script
   useEffect(() => {
