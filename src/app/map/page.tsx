@@ -8,6 +8,7 @@ export default function MapPage() {
   const { data, isPending, error } = useMapKitToken();
   const [darkMode, setDarkMode] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [showPlaces, setShowPlaces] = useState(true);
   const [location, setLocation] = useState<{
     name: string;
     lat: number;
@@ -137,6 +138,22 @@ export default function MapPage() {
                   Show Controls
                 </label>
               </div>
+
+              <div className="flex items-center">
+                <input
+                  id="show-places"
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={showPlaces}
+                  onChange={(e) => setShowPlaces(e.target.checked)}
+                />
+                <label
+                  htmlFor="show-places"
+                  className="ml-2 block text-sm text-gray-700"
+                >
+                  Show Apartments
+                </label>
+              </div>
             </div>
           </div>
 
@@ -149,6 +166,7 @@ export default function MapPage() {
               zoom={12}
               darkMode={darkMode}
               showControls={showControls}
+              showPlaces={showPlaces}
               className="h-[600px]"
             />
           </div>
@@ -166,6 +184,7 @@ export default function MapPage() {
   zoom={12}
   darkMode={${darkMode}}
   showControls={${showControls}}
+  showPlaces={${showPlaces}}
 />`}
             </pre>
           </div>
