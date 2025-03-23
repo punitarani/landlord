@@ -8,7 +8,7 @@
 export function createFreshMapKitObjects(
   latitude: number,
   longitude: number,
-  zoomLevel = 0.1,
+  zoomLevel = 0.01,
 ) {
   if (!window.mapkit) return null;
 

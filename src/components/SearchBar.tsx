@@ -150,52 +150,50 @@ export function SearchBar({ onSearch, map }: SearchBarProps) {
   };
 
   return (
-    <div className="absolute top-4 left-0 right-0 z-10 mx-auto w-full max-w-md px-4">
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for a place..."
-          className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          aria-label="Search for locations"
-        />
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search for a place..."
+        className="w-full rounded-lg border border-gray-200 bg-white/90 backdrop-blur-sm px-4 py-3 shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+        aria-label="Search for locations"
+      />
 
-        {isSearching && (
-          <div className="absolute right-3 top-2.5">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
-          </div>
-        )}
+      {isSearching && (
+        <div className="absolute right-3 top-3.5">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
+        </div>
+      )}
 
-        {error && query.length > 0 && (
-          <div className="absolute mt-1 w-full rounded-lg border border-red-300 bg-red-50 p-2 text-sm text-red-600 shadow-lg">
-            {error}
-          </div>
-        )}
+      {error && query.length > 0 && (
+        <div className="absolute mt-1 w-full rounded-lg border border-red-200 bg-red-50/90 backdrop-blur-sm p-2 text-sm text-red-600 shadow-lg">
+          {error}
+        </div>
+      )}
 
-        {searchResults.length > 0 && !error && (
-          <div className="absolute mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-300 bg-white shadow-lg">
-            {searchResults.map((result) => (
-              <button
-                key={result.id}
-                type="button"
-                className="w-full cursor-pointer p-3 text-left hover:bg-gray-100"
-                onClick={() => handleSearch(result)}
-              >
-                <p className="font-medium">
-                  {result.displayLines?.[0] || "Unknown place"}
+      {searchResults.length > 0 && !error && (
+        <div className="absolute mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-lg">
+          {searchResults.map((result) => (
+            <button
+              key={result.id}
+              type="button"
+              className="w-full cursor-pointer p-3 text-left hover:bg-gray-100/80 transition-colors"
+              onClick={() => handleSearch(result)}
+            >
+              <p className="font-medium">
+                {result.displayLines?.[0] || "Unknown place"}
+              </p>
+              {result.displayLines?.[1] && (
+                <p className="text-sm text-gray-600">
+                  {result.displayLines[1]}
                 </p>
-                {result.displayLines?.[1] && (
-                  <p className="text-sm text-gray-600">
-                    {result.displayLines[1]}
-                  </p>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
