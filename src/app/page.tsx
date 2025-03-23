@@ -1,11 +1,24 @@
 "use client";
 
 import { MapKit } from "@/components/MapKit";
+import { CacheControlBar } from "@/components/CacheControlBar";
+import { useCachedPlaces } from "@/hooks/use-cached-places";
 import { useState } from "react";
 
 export default function HomePage() {
   const [showApartments, setShowApartments] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+  
+  // Use the cached places hook directly in the page component
+  const { 
+    places, 
+    loading, 
+    isCached, 
+    isFetchingFresh, 
+    refreshData, 
+    clearCache,
+    lastUpdated
+  } = useCachedPlaces();
 
   // San Francisco city center coordinates
   const latitude = 37.7749; // Centered on San Francisco
@@ -38,7 +51,20 @@ export default function HomePage() {
           </label>
         </div>
 
-        <div className="text-sm text-gray-500">Zoom in to see apartments</div>
+        <div className="text-sm text-gray-500">
+          {loading ? 'Loading places...' : `${places.length} places loaded`}
+        </div>
+      </div>
+      
+      <div className="w-full max-w-4xl">
+        {/* Cache control bar */}
+        <CacheControlBar
+          isCached={isCached}
+          isFetchingFresh={isFetchingFresh}
+          lastUpdated={lastUpdated || undefined}
+          onRefresh={refreshData}
+          onClearCache={clearCache}
+        />
       </div>
 
       <div className="w-full max-w-4xl">
@@ -51,6 +77,8 @@ export default function HomePage() {
           darkMode={darkMode}
           showPlaces={showApartments}
           className="rounded-lg shadow-lg h-[70vh]"
+          // Use the places directly from our hook
+          cachedPlaces={places}
         />
       </div>
 

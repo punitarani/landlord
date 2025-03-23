@@ -20,6 +20,34 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Features
+
+### Apartment Display with Reviews
+
+The application displays apartments on a map, with zoom functionality to see details. When you click on an apartment marker, you can see:
+
+- The apartment name
+- Address information
+- Average rating from reviews (if available)
+- Number of reviews
+
+### Offline Caching with IndexedDB
+
+Data from Supabase is now cached in the browser's IndexedDB storage, providing these benefits:
+
+- **Improved Performance**: Loads instantly from cache when available
+- **Offline Support**: View apartments and reviews even without internet connection
+- **Reduced API Calls**: Less strain on the Supabase backend
+- **Background Updates**: Fresh data is fetched in the background while showing cached data
+
+The cache control bar at the top of the map shows:
+
+- Whether you're viewing cached or live data
+- When the data was last updated
+- Buttons to manually refresh data or clear the cache
+
+Cache duration is set to 60 minutes by default.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

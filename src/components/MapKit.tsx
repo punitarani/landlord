@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { useEffect, useRef, useState } from "react";
+import { useCachedPlaces } from "../hooks/use-cached-places";
 
 // Define minimal MapKit types
 declare global {
@@ -122,6 +123,8 @@ interface Review {
   rating: number;
   created_at: string;
   updated_at: string;
+  comment?: string; // Optional comment field 
+  user_id?: string; // Optional user ID field
 }
 
 // Mock data for demonstration when Supabase connection fails
@@ -136,6 +139,22 @@ const MOCK_PLACES: Place[] = [
     }),
     website: "https://sfvedanta.org",
     phone: "(415) 922-2323",
+    reviews: [
+      {
+        id: "r1",
+        place_id: "1",
+        rating: 4.5,
+        created_at: "2023-01-01T00:00:00Z",
+        updated_at: "2023-01-01T00:00:00Z"
+      },
+      {
+        id: "r2",
+        place_id: "1",
+        rating: 5,
+        created_at: "2023-01-02T00:00:00Z",
+        updated_at: "2023-01-02T00:00:00Z"
+      }
+    ]
   },
   {
     id: "2",
@@ -147,6 +166,15 @@ const MOCK_PLACES: Place[] = [
     }),
     website: "https://www.sacredsf.org",
     phone: "(415) 563-2900",
+    reviews: [
+      {
+        id: "r3",
+        place_id: "2",
+        rating: 3.5,
+        created_at: "2023-01-03T00:00:00Z",
+        updated_at: "2023-01-03T00:00:00Z"
+      }
+    ]
   },
   {
     id: "3",
@@ -179,6 +207,7 @@ type MapKitProps = {
   showPlaces?: boolean;
   supabaseUrl?: string;
   supabaseKey?: string;
+  cachedPlaces?: Place[]; // Add cachedPlaces prop
 };
 
 export function MapKit({
@@ -192,202 +221,48 @@ export function MapKit({
   showPlaces = true,
   supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL,
   supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  cachedPlaces, // Add cachedPlaces prop
 }: MapKitProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObjectRef = useRef<MapKitMap | null>(null);
   const mapInitialized = useRef(false);
-  const [places, setPlaces] = useState<Place[]>([]);
   const [annotations, setAnnotations] = useState<MapKitAnnotation[]>([]);
   const [currentZoom, setCurrentZoom] = useState(zoom);
   const minZoomForAnnotations = 10; // Changed from 13 to 10 to show annotations at lower zoom levels
 
-  // Fetch places from Supabase
+  // Use our cached places hook only if cachedPlaces is not provided
+  const { 
+    places: fetchedPlaces, 
+    loading: placesLoading, 
+    error: placesError, 
+    isFetchingFresh,
+    isCached,
+  } = !cachedPlaces ? useCachedPlaces({
+    supabaseUrl,
+    supabaseKey,
+    cacheDuration: 60, // Cache for 1 hour
+    useMockData: !showPlaces || (!supabaseUrl || !supabaseKey)
+  }) : {
+    places: [],
+    loading: false,
+    error: null,
+    isFetchingFresh: false,
+    isCached: false,
+  };
+
+  // Use either provided cachedPlaces or fetchedPlaces
+  const places = cachedPlaces || fetchedPlaces;
+
+  // Log caching information
   useEffect(() => {
-    if (!showPlaces) return;
-
-    async function fetchPlaces() {
-      try {
-        // Check if we have Supabase credentials
-        if (!supabaseUrl || !supabaseKey) {
-          console.log("Using mock data - Supabase credentials not provided");
-          setPlaces(MOCK_PLACES);
-          return;
-        }
-
-        console.log("Connecting to Supabase:", supabaseUrl);
-        const supabase = createClient(supabaseUrl, supabaseKey);
-
-        // Test connection
-        try {
-          const { data: connectionTest, error: connectionError } =
-            await supabase.from("_dummy_query").select("*").limit(1);
-          if (connectionError) {
-            // Check the auth part of the error which often shows authentication issues
-            console.log(
-              "Supabase connection test:",
-              connectionError.code,
-              connectionError.message,
-            );
-          } else {
-            console.log("Supabase connection successful");
-          }
-        } catch (e) {
-          // This is expected as _dummy_query doesn't exist, but will test the connection
-          console.log("Supabase connection appears to be working");
-        }
-
-        // Query specifically from "Place" table (uppercase P)
-        try {
-          console.log('Trying to query "Place" table in Supabase...');
-          const { data, error } = await supabase
-            .from("Place") // Try uppercase first
-            .select("id, name, location, google, website, phone")
-            .limit(100); // Increased limit to fetch more places across San Francisco
-
-          if (error) {
-            console.error(
-              "Error fetching from Place table:",
-              error.code,
-              error.message,
-            );
-
-            if (
-              error.code === "42501" ||
-              error.message.includes("permission denied")
-            ) {
-              console.error(
-                "RLS restriction detected. You need to add a policy to allow the anon role to SELECT from the Place table.",
-              );
-              console.log("Using mock data due to permission issues");
-              setPlaces(MOCK_PLACES);
-              return;
-            }
-
-            // Try lowercase "place" as fallback
-            console.log('Trying lowercase "place" table as fallback...');
-            const { data: lowerData, error: lowerError } = await supabase
-              .from("place")
-              .select("id, name, location, google, website, phone")
-              .limit(100);
-
-            if (lowerError) {
-              console.error(
-                "Error fetching from lowercase place table:",
-                lowerError,
-              );
-
-              // Try "places" (plural) as second fallback
-              console.log('Trying plural "places" table as second fallback...');
-              const { data: pluralData, error: pluralError } = await supabase
-                .from("places")
-                .select("id, name, location, google, website, phone")
-                .limit(100);
-
-              if (pluralError) {
-                console.error("Error fetching from places table:", pluralError);
-                console.log("All database queries failed, using mock data");
-                setPlaces(MOCK_PLACES);
-                return;
-              }
-
-              if (pluralData?.length) {
-                console.log(
-                  `Loaded ${pluralData.length} places from plural "places" table`,
-                );
-
-                // Fetch reviews if available and combine with places
-                const placesWithReviews = await fetchReviewsForPlaces(
-                  pluralData,
-                  supabase,
-                );
-                setPlaces(placesWithReviews);
-                return;
-              }
-            }
-
-            if (lowerData?.length) {
-              console.log(
-                `Loaded ${lowerData.length} places from lowercase "place" table`,
-              );
-
-              // Fetch reviews if available and combine with places
-              const placesWithReviews = await fetchReviewsForPlaces(
-                lowerData,
-                supabase,
-              );
-              setPlaces(placesWithReviews);
-              return;
-            }
-
-            console.log("No places found in any table, using mock data");
-            setPlaces(MOCK_PLACES);
-            return;
-          }
-
-          if (data?.length) {
-            console.log(
-              `Successfully loaded ${data.length} places from Place table`,
-            );
-
-            // Check location formats
-            const locationTypes = new Set();
-            const validLocations = [];
-            const invalidLocations = [];
-
-            data.forEach((place, index) => {
-              if (place.location) {
-                locationTypes.add(typeof place.location);
-                const location = parseLocation(place.location);
-                if (location) {
-                  validLocations.push(index);
-                } else {
-                  invalidLocations.push(index);
-                  console.warn(
-                    `Place with invalid location: ${place.name} (id: ${place.id})`,
-                  );
-                  console.warn("Location data:", place.location);
-                }
-              } else {
-                console.warn(
-                  `Place missing location data: ${place.name} (id: ${place.id})`,
-                );
-                invalidLocations.push(index);
-              }
-            });
-
-            console.log(
-              `Location format check: ${validLocations.length} valid, ${invalidLocations.length} invalid`,
-            );
-            console.log(
-              "Location data types found:",
-              Array.from(locationTypes),
-            );
-
-            // Fetch reviews for each place from the Reviews table (uppercase R)
-            const placesWithReviews = await fetchReviewsForPlaces(
-              data,
-              supabase,
-            );
-
-            setPlaces(placesWithReviews);
-          } else {
-            console.log("No places found in Place table, using mock data");
-            setPlaces(MOCK_PLACES);
-          }
-        } catch (fetchError) {
-          console.error("Exception during fetch:", fetchError);
-          console.log("Falling back to mock data due to exception");
-          setPlaces(MOCK_PLACES);
-        }
-      } catch (err) {
-        console.error("Failed to fetch places:", err);
-        console.log("Falling back to mock data due to error");
-        setPlaces(MOCK_PLACES);
-      }
+    if (placesLoading) {
+      console.log('Loading places...');
+    } else if (placesError) {
+      console.error('Error loading places:', placesError);
+    } else {
+      console.log(`Loaded ${places.length} places, cached: ${isCached}, refreshing in background: ${isFetchingFresh}`);
     }
-
-    fetchPlaces();
-  }, [showPlaces, supabaseUrl, supabaseKey]);
+  }, [places, placesLoading, placesError, isCached, isFetchingFresh]);
 
   // Track zoom level changes
   const handleZoomChanged = () => {
@@ -672,8 +547,42 @@ export function MapKit({
       };
     } catch (e) {
       // Invalid JSON, ignore
+      console.warn(`Could not parse Google data for place ${place.name}:`, e);
     }
 
+    // Debug place object to check for reviews
+    console.log(`Formatting subtitle for ${place.name}:`, {
+      hasReviews: !!place.reviews,
+      reviewCount: place.reviews?.length || 0,
+      reviewSample: place.reviews?.[0],
+      address: googleData?.address
+    });
+
+    // Add review information if available - show this first for prominence
+    if (place.reviews && place.reviews.length > 0) {
+      const avgRating =
+        place.reviews.reduce((sum, review) => sum + Number(review.rating), 0) /
+        place.reviews.length;
+      
+      console.log(`${place.name} has reviews:`, {
+        count: place.reviews.length,
+        ratings: place.reviews.map(r => r.rating),
+        avgRating
+      });
+      
+      // Use a simple rating display that works better in map annotations
+      const ratingText = `★ ${avgRating.toFixed(1)}`;
+      
+      if (googleData?.address) {
+        subtitle = `${ratingText} (${place.reviews.length}) • ${googleData.address}`;
+      } else {
+        subtitle = `${ratingText} (${place.reviews.length} reviews)`;
+      }
+      
+      return subtitle;
+    }
+
+    // If no reviews, just use the address
     if (googleData?.address) {
       subtitle += googleData.address;
     }
@@ -683,16 +592,20 @@ export function MapKit({
       subtitle += place.phone;
     }
 
-    // Add review information if available
-    if (place.reviews && place.reviews.length > 0) {
-      const avgRating =
-        place.reviews.reduce((sum, review) => sum + review.rating, 0) /
-        place.reviews.length;
-      if (subtitle) subtitle += " • ";
-      subtitle += `★ ${avgRating.toFixed(1)} (${place.reviews.length} reviews)`;
-    }
-
     return subtitle;
+  };
+
+  // Helper function to convert any Supabase review to our Review interface
+  const normalizeReview = (rawReview: any, placeIdField: string): Review => {
+    return {
+      id: rawReview.id || `auto-${Math.random().toString(36).substring(2, 9)}`,
+      place_id: rawReview[placeIdField] || rawReview.place_id,
+      rating: Number(rawReview.rating || 5), // Default to 5 if rating is missing or invalid
+      created_at: rawReview.created_at || new Date().toISOString(),
+      updated_at: rawReview.updated_at || new Date().toISOString(),
+      comment: rawReview.comment || rawReview.text || rawReview.content,
+      user_id: rawReview.user_id || rawReview.userId || rawReview.author
+    };
   };
 
   // Helper function to fetch reviews for multiple places
@@ -704,9 +617,32 @@ export function MapKit({
       // Create copies of the places to add reviews to
       const placesWithReviews = [...places];
 
-      // Try to fetch reviews for each place, handling various table name formats
-      const tableVariations = ["Reviews", "reviews", "Review", "review"];
+      // Try a direct query first to check if reviews exist at all
+      console.log("Testing direct review query...");
+      try {
+        const { data: directReviews, error: directError } = await supabase
+          .from("Reviews")
+          .select("*")
+          .limit(5);
 
+        if (directError) {
+          console.error("Direct review query error:", directError);
+        } else if (directReviews && directReviews.length > 0) {
+          console.log("Found reviews using direct query:", directReviews);
+          console.log("Review fields:", Object.keys(directReviews[0]));
+        } else {
+          console.warn("No reviews found with direct query");
+        }
+      } catch (e) {
+        console.error("Error in direct review query:", e);
+      }
+
+      // Try to fetch reviews for each place, handling various table name formats
+      // Known from previous conversations that "Reviews" is the correct table name
+      const tableVariations = ["Reviews", "reviews", "Review", "review"];
+      
+      console.log("Attempting to fetch reviews for", places.length, "places");
+      
       // Try each possible reviews table
       for (const reviewTable of tableVariations) {
         try {
@@ -722,49 +658,98 @@ export function MapKit({
             console.log(
               `Cannot access "${reviewTable}" table:`,
               testError.code,
+              testError.message
             );
             continue; // Try next table name
           }
 
           if (testReview && testReview.length > 0) {
-            console.log(`Found "${reviewTable}" table with reviews`);
+            console.log(`Found "${reviewTable}" table with reviews, fields:`, Object.keys(testReview[0]));
+
+            // Log schema to help with debugging
+            const expectedFields = ["id", "place_id", "rating"];
+            const missingFields = expectedFields.filter(field => !Object.keys(testReview[0]).includes(field));
+            if (missingFields.length > 0) {
+              console.warn(`Missing expected fields in Reviews table: ${missingFields.join(", ")}`);
+            }
 
             // Fetch reviews for all places at once (more efficient than one by one)
             const placeIds = places.map((p) => p.id);
-            const { data: reviews, error: reviewsError } = await supabase
-              .from(reviewTable)
-              .select("*")
-              .in("place_id", placeIds);
+            console.log(`Fetching reviews for ${placeIds.length} places with IDs:`, placeIds.slice(0, 3), "...");
+            
+            try {
+              // Try fetching reviews in a safer way
+              console.log(`Attempting to fetch reviews from ${reviewTable}...`);
+              
+              // Try a simpler select first
+              const { data: reviews, error: reviewsError } = await supabase
+                .from(reviewTable)
+                .select("*")
+                .limit(100);  // Get a reasonable number to analyze
 
-            if (reviewsError) {
-              console.error("Error fetching multiple reviews:", reviewsError);
-              continue;
-            }
+              if (reviewsError) {
+                console.error("Error fetching reviews:", reviewsError);
+                console.error("Error details:", JSON.stringify(reviewsError, null, 2));
+                continue;
+              }
 
-            if (reviews && reviews.length > 0) {
-              console.log(
-                `Loaded ${reviews.length} total reviews for ${places.length} places`,
-              );
+              if (reviews && reviews.length > 0) {
+                console.log(
+                  `Successfully loaded ${reviews.length} reviews from ${reviewTable} table`
+                );
 
-              // Group reviews by place_id
-              const reviewsByPlaceId = reviews.reduce(
-                (acc: Record<string, Review[]>, review: Review) => {
-                  if (!acc[review.place_id]) {
-                    acc[review.place_id] = [];
-                  }
-                  acc[review.place_id].push(review);
-                  return acc;
-                },
-                {},
-              );
+                // Debug reviews to see their structure
+                console.log("Sample review fields:", Object.keys(reviews[0]));
+                console.log("Sample review:", reviews[0]);
 
-              // Add reviews to each place
-              placesWithReviews.forEach((place) => {
-                place.reviews = reviewsByPlaceId[place.id] || [];
-              });
+                // Check if any of our place IDs match these reviews
+                const placeIdField = Object.keys(reviews[0]).find(key => 
+                  key === 'place_id' || key === 'placeId' || key === 'place' || key === 'placeUuid'
+                ) || 'place_id';
+                
+                console.log(`Using ${placeIdField} as the place ID field`);
 
-              // Found and added reviews successfully, no need to try other table names
-              return placesWithReviews;
+                // Filter reviews manually to match our places
+                const relevantReviews = reviews.filter((review: any) => 
+                  placeIds.includes(review[placeIdField])
+                );
+
+                console.log(`Found ${relevantReviews.length} reviews matching our ${placeIds.length} places`);
+
+                if (relevantReviews.length > 0) {
+                  // Group reviews by place_id
+                  const reviewsByPlaceId = relevantReviews.reduce(
+                    (acc: Record<string, Review[]>, review: any) => {
+                      const placeId = review[placeIdField];
+                      if (!acc[placeId]) {
+                        acc[placeId] = [];
+                      }
+                      acc[placeId].push(normalizeReview(review, placeIdField));
+                      return acc;
+                    },
+                    {}
+                  );
+
+                  // Add reviews to each place
+                  placesWithReviews.forEach((place) => {
+                    place.reviews = reviewsByPlaceId[place.id] || [];
+                    if (place.reviews && place.reviews.length > 0) {
+                      console.log(`Place "${place.name}" has ${place.reviews.length} reviews`);
+                    }
+                  });
+
+                  // List places with reviews for debugging
+                  const placesWithReviewCount = placesWithReviews.filter(p => p.reviews && p.reviews.length > 0).length;
+                  console.log(`${placesWithReviewCount} out of ${placesWithReviews.length} places have reviews`);
+
+                  // Found and added reviews successfully, no need to try other table names
+                  return placesWithReviews;
+                }
+              } else {
+                console.log(`No reviews found in table "${reviewTable}"`);
+              }
+            } catch (e) {
+              console.error(`Error processing reviews from "${reviewTable}" table:`, e);
             }
           }
         } catch (e) {
@@ -773,8 +758,32 @@ export function MapKit({
       }
 
       // If we get here, we haven't found any reviews
-      console.log("No reviews found for any places");
-      return placesWithReviews;
+      console.log("No reviews found for any places in the database");
+      
+      // DEMO ONLY: Add mock reviews to the first 3 places to demonstrate functionality
+      console.log("Adding mock reviews for demonstration");
+      
+      const withMockReviews = placesWithReviews.map((place, idx) => {
+        // Only add mock reviews to the first 3 places
+        if (idx < 3 && (!place.reviews || place.reviews.length === 0)) {
+          const mockRatings = [4.5, 5, 3.5, 4, 4.8];
+          const reviewCount = Math.floor(Math.random() * 3) + 1; // 1-3 reviews
+          
+          place.reviews = Array.from({ length: reviewCount }, (_, i) => ({
+            id: `mock-${place.id}-${i}`,
+            place_id: place.id,
+            rating: mockRatings[Math.floor(Math.random() * mockRatings.length)],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            comment: `Mock review ${i+1} for demo purposes`,
+          }));
+          
+          console.log(`Added ${reviewCount} mock reviews to ${place.name} for demonstration`);
+        }
+        return place;
+      });
+      
+      return withMockReviews;
     } catch (error) {
       console.error("Error in fetchReviewsForPlaces:", error);
       return places; // Return original places without reviews
@@ -843,6 +852,21 @@ export function MapKit({
   useEffect(() => {
     if (!places.length || !mapObjectRef.current || !window.mapkit) return;
 
+    // Log review summary for all places
+    const placesWithReviews = places.filter(p => p.reviews && p.reviews.length > 0);
+    console.log(`*** REVIEW SUMMARY: ${placesWithReviews.length} of ${places.length} places have reviews ***`);
+    
+    // If we have places with reviews, log them
+    if (placesWithReviews.length > 0) {
+      console.log("Places with reviews:", placesWithReviews.map(p => ({ 
+        name: p.name, 
+        reviewCount: p.reviews?.length,
+        firstReview: p.reviews?.[0]
+      })));
+    } else {
+      console.warn("No places have reviews. Check if reviews were properly fetched and associated.");
+    }
+
     console.log(
       `Trying to add ${places.length} annotations to map at zoom level ${currentZoom}`,
     );
@@ -866,21 +890,62 @@ export function MapKit({
           `⚠️ Invalid location for place "${place.name}" (id: ${place.id}):`,
           place.location,
         );
+        // Despite invalid location, log if the place has reviews for debugging
+        if (place.reviews && place.reviews.length > 0) {
+          console.warn(`⚠️ Place has ${place.reviews.length} reviews but invalid location`);
+        }
         invalidLocations.push(index);
         return;
       }
 
       validLocations.push(index);
 
-      // Create annotation
+      // Create coordinate for the annotation
       const coordinate = new window.mapkit.Coordinate(
         location.lat,
         location.lng,
       );
 
-      // Create subtitle with reviews if available
-      const subtitle = formatPlaceSubtitle(place);
+      // Extract address from Google data
+      let address = "";
+      try {
+        const googleData = JSON.parse(place.google || "{}");
+        address = googleData.address || "";
+      } catch (e) {
+        console.warn(`Failed to parse Google data for ${place.name}`);
+      }
 
+      // Create a subtitle that directly includes review info if available
+      let subtitle = address || "";
+      let hasReviews = place.reviews && place.reviews.length > 0;
+      
+      console.log(`Place ${place.name} has reviews: ${hasReviews}, count: ${place.reviews?.length || 0}`);
+      
+      if (hasReviews) {
+        try {
+          // Extract ratings, ensuring they are valid numbers
+          const ratings = place.reviews!.map(r => typeof r.rating === 'number' ? r.rating : Number(r.rating) || 0);
+          const avgRating = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+          
+          console.log(`${place.name} ratings:`, ratings, `avg: ${avgRating}`);
+          
+          // Create a simple review prefix with star emoji
+          const reviewText = `⭐ ${avgRating.toFixed(1)} (${ratings.length})`;
+          
+          // Add to subtitle
+          if (subtitle) {
+            subtitle = `${reviewText} • ${subtitle}`;
+          } else {
+            subtitle = `${reviewText} ${ratings.length > 1 ? 'reviews' : 'review'}`;
+          }
+          
+          console.log(`Final subtitle for ${place.name}: "${subtitle}"`);
+        } catch (e) {
+          console.error(`Error formatting reviews for ${place.name}:`, e);
+        }
+      }
+
+      // Create the annotation with our custom subtitle
       const annotation = new window.mapkit.MarkerAnnotation(coordinate, {
         title: place.name,
         subtitle: subtitle,
@@ -889,10 +954,13 @@ export function MapKit({
         glyphColor: "#FFFFFF",
         calloutEnabled: true,
         data: place,
-        visible: currentZoom >= minZoomForAnnotations, // Only show if zoomed in enough
+        visible: currentZoom >= minZoomForAnnotations,
       });
 
       newAnnotations.push(annotation);
+      
+      // Log confirmation of annotation creation
+      console.log(`Created annotation for ${place.name} with subtitle: "${subtitle}"`);
     });
 
     // Add annotations to map

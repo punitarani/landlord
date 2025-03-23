@@ -89,6 +89,36 @@ The map will display apartment markers when:
 2. The user zooms in to at least level 13 (configurable)
 3. The "Show Apartments" option is enabled
 
+## Offline Caching
+
+The application now includes browser-based caching using IndexedDB to improve performance and provide offline support:
+
+### Caching Features
+
+- **Automatic Caching**: All place and review data is cached automatically when first loaded
+- **Cache Expiration**: Cache expires after 60 minutes by default (configurable)
+- **Background Refreshing**: Fresh data is fetched in the background while showing cached data
+- **Cache Status Indicator**: Visual indicator shows whether you're viewing cached or live data
+- **Manual Controls**: Buttons to manually refresh data or clear the cache
+
+### How Caching Works
+
+1. When the app loads, it checks if valid cached data exists in IndexedDB
+2. If valid cache exists, it immediately displays that data
+3. In the background, it fetches fresh data from Supabase
+4. If no valid cache exists, or if cache is expired, it fetches from Supabase
+5. If network errors occur, it falls back to cached data when available
+
+### Cache Configuration
+
+You can adjust the cache duration in the `useCachedPlaces` hook:
+
+```typescript
+const { places, ... } = useCachedPlaces({
+  cacheDuration: 60, // Cache duration in minutes (default: 60)
+});
+```
+
 ## Adding Your Own Apartment Data
 
 You can add your apartment data to the `places` (or `Place`) table with the following fields:
@@ -158,6 +188,15 @@ If you're getting errors with location data, ensure you're using either:
 
 - GeoJSON format: `{"type":"Point","coordinates":[-122.3679921,37.8243381]}`
 - Or POINT format: `POINT(-122.3679921 37.8243381)`
+
+### Cache issues?
+
+If you experience problems with the cache:
+
+1. Try clicking the "Clear Cache" button in the cache control bar
+2. Check browser console for IndexedDB-related errors
+3. Make sure your browser supports IndexedDB (all modern browsers do)
+4. If using private browsing/incognito mode, be aware that IndexedDB storage might be limited
 
 ### Table name issues?
 
