@@ -1,6 +1,5 @@
 "use client";
 
-import type { CoordinateRegion } from "@/types/mapkit";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // Define our own SearchResult interface since we need to add an id field
@@ -11,11 +10,18 @@ interface SearchResult {
   };
   displayLines: string[];
   id?: string; // Add id for better key handling
+  name?: string; // Optional name property
+  phone?: string; // Optional phone property
+  url?: string; // Optional URL property
+  // Other properties that might be useful
+  formattedAddress?: string;
+  postalCode?: string;
+  countryCode?: string;
 }
 
 // Use a more specific type for the map instance using imported types
 interface MapInstance {
-  region: CoordinateRegion;
+  region: mapkit.CoordinateRegion;
 }
 
 // Define simplified search results interface
@@ -24,10 +30,7 @@ interface SearchResults {
 }
 
 interface SearchBarProps {
-  onSearch: (searchResult: {
-    coordinate: { latitude: number; longitude: number };
-    displayLines: string[];
-  }) => void;
+  onSearch: (searchResult: SearchResult) => void;
   map?: MapInstance;
 }
 
@@ -88,7 +91,6 @@ export function SearchBar({ onSearch, map }: SearchBarProps) {
           setIsSearching(false);
 
           if (searchError) {
-            console.error("Search error:", searchError);
             setError("An error occurred during search. Please try again.");
             return;
           }
@@ -112,7 +114,6 @@ export function SearchBar({ onSearch, map }: SearchBarProps) {
         },
       );
     } catch (err) {
-      console.error("MapKit search error:", err);
       setIsSearching(false);
       setError("Unable to perform search. Please try again later.");
     }
@@ -139,16 +140,10 @@ export function SearchBar({ onSearch, map }: SearchBarProps) {
 
   const handleSearch = (result: SearchResult) => {
     if (result?.coordinate) {
-      // Make sure we're passing the raw coordinate object with latitude and longitude
-      onSearch({
-        coordinate: {
-          latitude: result.coordinate.latitude,
-          longitude: result.coordinate.longitude,
-        },
-        // Pass through other properties if needed
-        displayLines: result.displayLines,
-      });
+      // Pass the complete search result object to preserve all details
+      onSearch(result);
 
+      // Clear the search UI
       setQuery("");
       setSearchResults([]);
     }

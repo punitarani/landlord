@@ -1,6 +1,5 @@
 "use client";
 
-import type { MapKit as MapKitMapType } from "@/types/mapkit";
 import { useCallback, useEffect, useRef } from "react";
 
 type MapKitProps = {
@@ -18,7 +17,7 @@ type MapKitProps = {
     bottom?: number;
     left?: number;
   };
-  onMapInitialized?: (map: MapKitMapType) => void;
+  onMapInitialized?: (map: mapkit.Map) => void;
 };
 
 export function MapKit({
@@ -36,7 +35,7 @@ export function MapKit({
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInitialized = useRef(false);
   const scriptLoaded = useRef(false);
-  const mapInstance = useRef<MapKitMapType | null>(null);
+  const mapInstance = useRef<mapkit.Map | null>(null);
 
   // Create the initializeMap function with useCallback
   const initializeMap = useCallback(() => {
@@ -44,10 +43,21 @@ export function MapKit({
       return;
 
     try {
-      window.mapkit.init({
-        authorizationCallback: (done: (token: string) => void) => done(token),
-        language: "en",
-      });
+      // Only initialize if not already initialized
+      // Use a custom property on window to track initialization
+      const mapkitWithCustomProps = window.mapkit as typeof window.mapkit & {
+        _jsAPIInitialized?: boolean;
+      };
+
+      if (!mapkitWithCustomProps._jsAPIInitialized) {
+        window.mapkit.init({
+          authorizationCallback: (done: (token: string) => void) => done(token),
+          language: "en",
+        });
+
+        // Mark as initialized
+        mapkitWithCustomProps._jsAPIInitialized = true;
+      }
 
       // Configure map options with proper enums
       const mapOptions = {
@@ -69,7 +79,7 @@ export function MapKit({
       mapInstance.current = map;
 
       // Set color scheme based on darkMode prop
-      (map as MapKitMapType & { colorScheme: string }).colorScheme = darkMode
+      (map as mapkit.Map & { colorScheme: string }).colorScheme = darkMode
         ? "dark"
         : "light";
 
@@ -122,6 +132,17 @@ export function MapKit({
       return;
     }
 
+    // Check if script already exists in the DOM
+    const existingScript = document.querySelector(
+      'script[src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js"]',
+    );
+
+    if (existingScript) {
+      scriptLoaded.current = true;
+      initializeMap();
+      return;
+    }
+
     // Create and load MapKit JS script if not already loaded
     const script = document.createElement("script");
     script.src = "https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js";
@@ -135,20 +156,31 @@ export function MapKit({
     document.head.appendChild(script);
 
     return () => {
-      const scriptToRemove = document.querySelector(
-        'script[src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js"]',
-      );
-      if (scriptToRemove) document.head.removeChild(scriptToRemove);
+      // Don't remove the script on unmount to prevent multiple script loads
+      // This helps maintain a single MapKit instance throughout the app
     };
   }, [token, initializeMap]);
 
-  // Handle property updates by resetting the map when props change
+  // Handle property updates
   useEffect(() => {
-    if (mapInitialized.current && window.mapkit && mapRef.current) {
-      mapInitialized.current = false;
-      initializeMap();
+    if (
+      mapInitialized.current &&
+      window.mapkit &&
+      mapRef.current &&
+      mapInstance.current
+    ) {
+      try {
+        const map = mapInstance.current;
+
+        // Update color scheme
+        (map as mapkit.Map & { colorScheme: string }).colorScheme = darkMode
+          ? "dark"
+          : "light";
+      } catch (error) {
+        console.error("Error updating map color scheme:", error);
+      }
     }
-  }, [initializeMap]);
+  }, [darkMode]);
 
   return (
     <div
