@@ -1,5 +1,6 @@
 import { MapKit } from "@/components/MapKit";
 import { SearchBar } from "@/components/SearchBar";
+import { useAuth } from "@/contexts/auth-context";
 import { useCachedPlaces } from "@/hooks/use-cached-places";
 import { useMapKitToken } from "@/hooks/use-mapkit-token";
 import {
@@ -38,6 +39,7 @@ const HomeView: FC = () => {
   const { data, isPending, error: mapKitError } = useMapKitToken();
   const [mapInstance, setMapInstance] = useState<mapkit.Map | null>(null);
   const mapInitializedRef = useRef(false);
+  const { user, isLoading: isAuthLoading } = useAuth();
 
   // Fetch cached places data
   const {
@@ -145,14 +147,16 @@ const HomeView: FC = () => {
     }
   }, [places]);
 
-  if (isPending) {
+  // Show loading state for map
+  if (isPending || isAuthLoading || !user) {
     return (
-      <div className="flex items-center justify-center h-screen w-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900" />
+      <div className="flex items-center justify-center h-screen w-screen bg-zinc-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-zinc-100" />
       </div>
     );
   }
 
+  // Show error state for map
   if (mapKitError || !data?.token) {
     return (
       <div className="flex items-center justify-center h-screen w-screen">
